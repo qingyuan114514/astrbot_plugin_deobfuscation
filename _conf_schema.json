@@ -1,0 +1,12 @@
+{
+  "use_forward_message": {
+    "type": "bool",
+    "description": "通过合并转发发送解析结果（仅OneBot v11平台有效）",
+    "default": false
+  },
+  "forward_sender_name": {
+    "type": "string",
+    "description": "合并转发消息中显示的发送者昵称",
+    "default": "解混淆结果"
+  }
+}
