@@ -1,6 +1,5 @@
 import os
 import io
-import time
 import glob
 import asyncio
 import functools
@@ -14,9 +13,9 @@ from PIL import Image as PILImage
 
 import astrbot.api.message_components as Comp
 from astrbot.api import logger
-from astrbot.api.event import AstrMessageEvent, MessageChain, filter
+from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
-from astrbot.core.star.star_tools import StarTools
+from astrbot.api.star import StarTools
 
 from .tomato_scramble import TomatoScramble
 
@@ -34,7 +33,7 @@ class TomatoScramblePlugin(Star):
 
     def __init__(self, context: Context, config=None):
         super().__init__(context, config)
-        self.data_dir = StarTools.get_data_dir("tomato_scramble")
+        self.data_dir = str(StarTools.get_data_dir("tomato_scramble"))
         self._session: aiohttp.ClientSession | None = None
 
         # 读取配置
@@ -45,7 +44,7 @@ class TomatoScramblePlugin(Star):
             self.forward_sender_name = config.get("forward_sender_name", "解混淆结果")
 
     @staticmethod
-    def _validate_url(url: str) -> None:
+    async def _validate_url(url: str) -> None:
         """校验 URL 安全性，防止 SSRF 攻击"""
         parsed = urlparse(url)
 
@@ -57,9 +56,10 @@ class TomatoScramblePlugin(Star):
         if not hostname:
             raise ValueError("无法解析主机名")
 
-        # DNS 解析获取真实 IP
+        # 异步 DNS 解析，避免阻塞事件循环
+        loop = asyncio.get_running_loop()
         try:
-            addr_infos = socket.getaddrinfo(hostname, None)
+            addr_infos = await loop.getaddrinfo(hostname, None)
         except socket.gaierror:
             raise ValueError(f"无法解析主机: {hostname}")
 
@@ -75,9 +75,9 @@ class TomatoScramblePlugin(Star):
         return self._session
 
     async def _download_image(self, url: str) -> bytes:
-        self._validate_url(url)
+        await self._validate_url(url)
         session = await self._get_session()
-        async with session.get(url) as resp:
+        async with session.get(url, allow_redirects=False) as resp:
             if resp.status != 200:
                 raise Exception(f"HTTP {resp.status}")
             # 优先通过 Content-Length 快速拒绝超大文件
