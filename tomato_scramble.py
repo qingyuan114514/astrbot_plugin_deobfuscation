@@ -124,7 +124,7 @@ class TomatoScramble:
         pc = self.pixel_count
 
         # 直接用 numpy 数组操作，全程不转 tuple
-        px = np.array(self.pixels, dtype=np.uint8).reshape(pc, -1)
+        px = np.asarray(self.pixels, dtype=np.uint8).reshape(pc, -1)
         new_pixels = np.empty_like(px)
 
         lp = pc - offset
@@ -138,7 +138,7 @@ class TomatoScramble:
         offset = self.offset
         pc = self.pixel_count
 
-        px = np.array(self.pixels, dtype=np.uint8).reshape(pc, -1)
+        px = np.asarray(self.pixels, dtype=np.uint8).reshape(pc, -1)
         new_pixels = np.empty_like(px)
 
         lp = pc - offset

@@ -127,7 +127,7 @@ class TomatoScramblePlugin(Star):
         if width * height > _MAX_PIXEL_COUNT:
             raise ValueError(f"图片像素过大: {width}x{height} = {width * height}，上限 {_MAX_PIXEL_COUNT}")
         img = img.convert("RGB")
-        pixels = list(img.getdata())
+        pixels = np.asarray(img, dtype=np.uint8).reshape(-1, 3)
 
         scrambler = TomatoScramble(pixels, width, height, key)
         if mode == "encrypt":
