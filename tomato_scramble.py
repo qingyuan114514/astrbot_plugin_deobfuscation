@@ -1,15 +1,17 @@
 import math
+from collections import OrderedDict
 import numpy as np
-from functools import lru_cache
 
 
-# 模块级缓存：相同尺寸的图片共享同一条 Gilbert 曲线
-_curve_cache = {}
+# 模块级缓存：相同尺寸的图片共享同一条 Gilbert 曲线（LRU 淘汰）
+_curve_cache: OrderedDict = OrderedDict()
 _CACHE_MAX = 8
 
 
 def _build_gilbert2d(width, height):
     """生成 Gilbert 2D 空间填充曲线的位置数组（迭代式栈模拟，避免 Python 递归开销）"""
+    if not isinstance(width, int) or not isinstance(height, int) or width <= 0 or height <= 0:
+        raise ValueError(f"width 和 height 必须为正整数，收到: width={width}, height={height}")
     positions = np.empty(width * height, dtype=np.int64)
     pos = 0
 
@@ -77,15 +79,13 @@ def _build_gilbert2d(width, height):
 
 def _get_curve(width, height):
     """获取 Gilbert 曲线位置数组，带 LRU 缓存"""
-    global _curve_cache
     key = (width, height)
     if key in _curve_cache:
+        _curve_cache.move_to_end(key)  # 命中时移到末尾，标记为最近使用
         return _curve_cache[key]
     curve = _build_gilbert2d(width, height)
     if len(_curve_cache) >= _CACHE_MAX:
-        # 移除最早的一个
-        oldest = next(iter(_curve_cache))
-        del _curve_cache[oldest]
+        _curve_cache.popitem(last=False)  # 淘汰最久未使用的（队首）
     _curve_cache[key] = curve
     return curve
 
@@ -94,10 +94,19 @@ class TomatoScramble:
     """Tomato Scramble - Gilbert 2D curve + golden ratio offset (optimized)"""
 
     def __init__(self, pixels, width, height, key=1.0):
+        # 参数边界校验
+        if not isinstance(width, int) or not isinstance(height, int) or width <= 0 or height <= 0:
+            raise ValueError(f"width 和 height 必须为正整数，收到: width={width}, height={height}")
+        if not isinstance(key, (int, float)) or key <= 0:
+            raise ValueError(f"key 必须为正数，收到: {key}")
+        expected_count = width * height
+        if len(pixels) != expected_count:
+            raise ValueError(f"pixels 长度 ({len(pixels)}) 与 width*height ({expected_count}) 不一致")
+
         self.pixels = pixels
         self.width = width
         self.height = height
-        self.pixel_count = width * height
+        self.pixel_count = expected_count
         self.offset = round((math.sqrt(5) - 1) / 2 * self.pixel_count * key)
 
     def encrypt(self):
