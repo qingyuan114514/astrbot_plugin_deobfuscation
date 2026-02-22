@@ -94,6 +94,17 @@ class TomatoScramblePlugin(Star):
                 chunks.append(chunk)
             return b"".join(chunks)
 
+    @staticmethod
+    def _load_local_image(path: str) -> bytes:
+        """读取本地图片文件"""
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"本地文件不存在: {path}")
+        size = os.path.getsize(path)
+        if size > _MAX_DOWNLOAD_SIZE:
+            raise ValueError(f"本地图片体积过大: {size / 1024 / 1024:.1f}MB，上限 20MB")
+        with open(path, "rb") as f:
+            return f.read()
+
     def _extract_images(self, event: AstrMessageEvent) -> list:
         """从消息中提取图片，支持直接附带图片和引用消息中的图片"""
         images = []
@@ -113,12 +124,19 @@ class TomatoScramblePlugin(Star):
 
         return images
 
-    def _get_image_url(self, img_comp) -> str:
+    def _get_image_source(self, img_comp) -> tuple[str, str]:
+        """获取图片来源，返回 (type, value)
+        type: "url" 表示网络地址，"path" 表示本地文件路径
+        """
         if hasattr(img_comp, 'url') and img_comp.url:
-            return img_comp.url
+            return ("url", img_comp.url)
         if hasattr(img_comp, 'file') and img_comp.file:
-            return img_comp.file
-        raise Exception("cannot get image url")
+            f = img_comp.file
+            # 判断是否为本地路径（非 http/https 开头）
+            if not f.startswith(("http://", "https://")):
+                return ("path", f)
+            return ("url", f)
+        raise Exception("无法获取图片来源")
 
     def _process_image_sync(self, img_bytes: bytes, mode: str = "decrypt", key: float = 1.0) -> str:
         """CPU 密集的同步处理逻辑，由 _process_image 在线程池中调用"""
@@ -162,24 +180,31 @@ class TomatoScramblePlugin(Star):
         errors = []
         for i, img_comp in enumerate(images):
             try:
-                url = self._get_image_url(img_comp)
+                source_type, source_value = self._get_image_source(img_comp)
             except Exception as e:
-                logger.error(f"{mode_text} 第{i+1}张: 获取图片URL失败 - {type(e).__name__}: {e}")
-                errors.append((i + 1, f"获取URL失败: {e}"))
+                logger.error(f"{mode_text} 第{i+1}张: 获取图片来源失败 - {type(e).__name__}: {e}")
+                errors.append((i + 1, f"获取来源失败: {e}"))
                 continue
             try:
-                img_bytes = await self._download_image(url)
+                if source_type == "path":
+                    img_bytes = self._load_local_image(source_value)
+                else:
+                    img_bytes = await self._download_image(source_value)
             except ValueError as e:
                 logger.warning(f"{mode_text} 第{i+1}张: 安全校验拦截 - {e}")
                 errors.append((i + 1, f"安全校验: {e}"))
+                continue
+            except FileNotFoundError as e:
+                logger.error(f"{mode_text} 第{i+1}张: 本地文件未找到 - {e}")
+                errors.append((i + 1, f"文件未找到: {e}"))
                 continue
             except aiohttp.ClientError as e:
                 logger.error(f"{mode_text} 第{i+1}张: 网络请求失败 - {type(e).__name__}: {e}")
                 errors.append((i + 1, f"下载失败: {e}"))
                 continue
             except Exception as e:
-                logger.error(f"{mode_text} 第{i+1}张: 下载异常 - {type(e).__name__}: {e}")
-                errors.append((i + 1, f"下载异常: {e}"))
+                logger.error(f"{mode_text} 第{i+1}张: 获取图片异常 - {type(e).__name__}: {e}")
+                errors.append((i + 1, f"获取图片异常: {e}"))
                 continue
             try:
                 save_path = await self._process_image(img_bytes, mode, key)
@@ -204,10 +229,19 @@ class TomatoScramblePlugin(Star):
                 content=content
             )
             yield event.chain_result([node])
+            for p in success_paths:
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
         else:
             # 逐张发送模式
             for save_path in success_paths:
                 yield event.chain_result([Comp.Image.fromFileSystem(save_path)])
+                try:
+                    os.remove(save_path)
+                except OSError:
+                    pass
             for idx, err in errors:
                 yield event.plain_result(f"第{idx}张处理失败: {err}")
 
@@ -251,10 +285,11 @@ class TomatoScramblePlugin(Star):
         if self._session and not self._session.closed:
             await self._session.close()
             self._session = None
-        for f in glob.glob(os.path.join(self.data_dir, "*.png")):
-            try:
-                os.remove(f)
-            except PermissionError:
-                logger.warning(f"清理缓存文件权限不足，跳过: {f}")
-            except OSError as e:
-                logger.warning(f"清理缓存文件失败: {f} - {type(e).__name__}: {e}")
+        for pattern in ("encrypt_*.png", "decrypt_*.png"):
+            for f in glob.glob(os.path.join(self.data_dir, pattern)):
+                try:
+                    os.remove(f)
+                except PermissionError:
+                    logger.warning(f"清理缓存文件权限不足，跳过: {f}")
+                except OSError as e:
+                    logger.warning(f"清理缓存文件失败: {f} - {type(e).__name__}: {e}")
