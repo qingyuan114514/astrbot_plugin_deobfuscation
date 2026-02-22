@@ -24,8 +24,6 @@ from .tomato_scramble import TomatoScramble
 _MAX_DOWNLOAD_SIZE = 20 * 1024 * 1024  # 20MB 下载体积上限
 _MAX_PIXEL_COUNT = 4096 * 4096          # ~16M 像素上限
 
-# 启用 PIL 解压炸弹防护
-PILImage.MAX_IMAGE_PIXELS = _MAX_PIXEL_COUNT
 
 
 @register("tomato_scramble", "清远", "小番茄图片混淆/解混淆插件", "1.2.0")
