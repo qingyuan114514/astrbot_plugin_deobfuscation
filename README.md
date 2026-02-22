@@ -28,6 +28,7 @@
 ```
 Pillow
 aiohttp
+numpy
 ```
 
 ### 安装方式
