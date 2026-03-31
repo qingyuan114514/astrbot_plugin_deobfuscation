@@ -55,16 +55,16 @@ class TomatoScramblePlugin(Star):
             raise ValueError("无法解析主机名")
 
         # 异步 DNS 解析，避免阻塞事件循环
-        loop = asyncio.get_running_loop()
-        try:
-            addr_infos = await loop.getaddrinfo(hostname, None)
-        except socket.gaierror:
-            raise ValueError(f"无法解析主机: {hostname}")
+        # loop = asyncio.get_running_loop()
+        # try:
+        #     addr_infos = await loop.getaddrinfo(hostname, None)
+        # except socket.gaierror:
+        #     raise ValueError(f"无法解析主机: {hostname}")
 
-        for info in addr_infos:
-            ip = ipaddress.ip_address(info[4][0])
-            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
-                raise ValueError(f"禁止访问内网/保留地址: {ip}")
+        # for info in addr_infos:
+        #     ip = ipaddress.ip_address(info[4][0])
+        #     if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+        #         raise ValueError(f"禁止访问内网/保留地址: {ip}")
 
     async def _get_session(self) -> aiohttp.ClientSession:
         """懒创建并复用 aiohttp.ClientSession"""
